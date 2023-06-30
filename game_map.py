@@ -34,6 +34,10 @@ class GameMap:
         return 0 <= x < self.width and 0 <= y < self.height
 
     @property
+    def gamemap(self) -> GameMap:
+        return self
+
+    @property
     def actors(self) -> Iterator[Actor]:
         """Iterate over this maps living actors."""
         yield from (

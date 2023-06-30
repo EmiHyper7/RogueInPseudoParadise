@@ -34,20 +34,11 @@ class EscapeAction(Action):
     def perform(self) -> None:
         raise SystemExit()
 
-class ChangeMovementModeAction(Action):
-    def perform(self) -> None:
-        if self.entity.movement_mode == 0:
-            self.entity.movement_mode = 1
-            self.entity.color = (255, 255, 0)
-        elif self.entity.movement_mode == 1:
-            self.entity.movement_mode = 0
-            self.entity.color = (255, 255, 255)
-        self.entity.horizontal_movement = 0
-        self.entity.vertical_movement = 0
 
 class WaitAction(Action):
     def perform(self) -> None:
-        self.entity.real_action = 1
+        pass
+
 
 class ActionWithDirection(Action):
     def __init__(self, entity: Actor, dx: int, dy: int):
@@ -81,8 +72,6 @@ class MeleeAction(ActionWithDirection):
         if not target:
             return  # No entity to attack.
 
-        self.entity.real_action = 1
-
         damage = self.entity.fighter.power - target.fighter.defense
 
         attack_desc = f"{self.entity.name.capitalize()} attacks {target.name}"
@@ -112,29 +101,12 @@ class MovementAction(ActionWithDirection):
         if self.engine.game_map.get_blocking_entity_at_location(dest_x, dest_y):
                 return  # Destination is blocked by an entity.
 
-        self.entity.real_action = 1
         self.entity.move(self.dx, self.dy)
+
 
 class BumpAction(ActionWithDirection):
     def perform(self) -> None:
-        if self.entity.movement_mode == 0:
-            self.entity.ready_move = 1
-        elif self.entity.movement_mode == 1:
-            if self.dx != 0:
-                self.entity.horizontal_movement = self.dx
-            if self.dy != 0:
-                self.entity.vertical_movement = self.dy
-            if self.entity.horizontal_movement != 0 and self.entity.vertical_movement != 0:
-                self.entity.ready_move = 1
-                self.dx = self.entity.horizontal_movement
-                self.dy = self.entity.vertical_movement
-                self.entity.horizontal_movement = 0
-                self.entity.vertical_movement = 0
-        if self.entity.ready_move == 1:
-            self.entity.ready_move = 0
-
-            if self.target_actor:
-                return MeleeAction(self.entity, self.dx, self.dy).perform()
-
-            else:
-                return MovementAction(self.entity, self.dx, self.dy).perform()
+        if self.target_actor:
+            return MeleeAction(self.entity, self.dx, self.dy).perform()
+        else:
+            return MovementAction(self.entity, self.dx, self.dy).perform()
