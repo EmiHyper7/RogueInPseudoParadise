@@ -52,23 +52,17 @@ MOVE_KEYS = {
     # tcod.event.KeySym.n: (1, 1),
 }
 
+CONFIRM_KEYS = {
+    tcod.event.KeySym.RETURN,
+    tcod.event.KeySym.KP_ENTER,
+}
+
 WAIT_KEYS = {
     tcod.event.KeySym.PERIOD,
     tcod.event.KeySym.KP_5,
     tcod.event.KeySym.CLEAR,
     tcod.event.KeySym.LALT,
     tcod.event.KeySym.RALT,
-}
-
-CONFIRM_KEYS = {
-    tcod.event.KeySym.RETURN,
-    tcod.event.KeySym.KP_ENTER,
-}
-
-MOVEMENT_MODE_KEYS = {
-    tcod.event.KeySym.LCTRL,
-    tcod.event.KeySym.RCTRL,
-    tcod.event.KeySym.KP_PLUS,
 }
 
 
@@ -315,39 +309,42 @@ class LevelUpEventHandler(AskUserEventHandler):
         return None
 
 
-class InventoryEventHandler(AskUserEventHandler):
-    """This handler lets the user select an item.
+class MenuEventHandler(AskUserEventHandler):
+    highlight_index = 0
 
-    What happens then depends on the subclass.
-    """
+    menu_length = 0
 
     TITLE = "<missing title>"
 
-    def on_render(self, console: tcod.Console) -> None:
-        """Render an inventory menu, which displays the items in the inventory, and the letter to select them.
-        Will move to a different position based on where the player is located, so the player can always see where
-        they are.
-        """
-        super().on_render(console)
-        number_of_items_in_inventory = len(self.engine.player.inventory.items)
+    x = 0
+    y = 0
 
-        height = number_of_items_in_inventory + 2
+    def __init__(self, engine: Engine, previous_handler: Optional[ActionOrHandler]):
+        self.previous_handler = previous_handler
+        super().__init__(engine)
+
+    def on_render(self, console: tcod.Console) -> None:
+        super().on_render(console)
+
+        height = self.menu_length + 2
 
         if height <= 3:
             height = 3
 
         if self.engine.player.x <= 30:
-            x = 40
+            self.x = 40
         else:
-            x = 0
+            self.x = 0
 
-        y = 0
+        self.y = 0
 
         width = len(self.TITLE) + 4
 
+        highlight_string = " "
+
         console.draw_frame(
-            x=x,
-            y=y,
+            x=self.x,
+            y=self.y,
             width=width,
             height=height,
             title=self.TITLE,
@@ -356,7 +353,54 @@ class InventoryEventHandler(AskUserEventHandler):
             bg=(0, 0, 0),
         )
 
-        if number_of_items_in_inventory > 0:
+    def ev_keydown(self, event: tcod.event.KeyDown) -> Optional[ActionOrHandler]:
+        key = event.sym
+
+        if key in MOVE_KEYS:
+            x, y = MOVE_KEYS[key]
+            if y < 0:
+                self.highlight_index -= 1
+            elif y > 0:
+                self.highlight_index += 1
+            if self.highlight_index < 0:
+                self.highlight_index = self.menu_length - 1
+            elif self.highlight_index > (self.menu_length - 1):
+                self.highlight_index = 0
+        else:
+            return super().ev_keydown(event)
+
+    def ev_mousebuttondown(
+        self, event: tcod.event.MouseButtonDown
+    ) -> Optional[ActionOrHandler]:
+        """
+        Don't allow the player to click to exit the menu, like normal.
+        """
+        return None
+
+    def on_exit(self) -> Optional[ActionOrHandler]:
+        """Called when the user is trying to exit or cancel an action.
+
+        returns to previous event handler.
+        """
+        return self.previous_handler
+
+
+class InventoryEventHandler(MenuEventHandler):
+    """This handler lets the user select an item.
+
+    What happens then depends on the subclass.
+    """
+
+    def on_render(self, console: tcod.Console) -> None:
+        """Render an inventory menu, which displays the items in the inventory, and the letter to select them.
+        Will move to a different position based on where the player is located, so the player can always see where
+        they are.
+        """
+        self.menu_length = len(self.engine.player.inventory.items)
+
+        super().on_render(console)
+
+        if self.menu_length > 0:
             for i, item in enumerate(self.engine.player.inventory.items):
                 item_key = chr(ord("a") + i)
                 is_equipped = self.engine.player.equipment.item_is_equipped(item)
@@ -366,13 +410,21 @@ class InventoryEventHandler(AskUserEventHandler):
                 if is_equipped:
                     item_string = f"{item_string} (E)"
 
-                console.print(x + 1, y + i + 1, item_string)
+                if i == self.highlight_index:
+                    highlight_string = " " * (len(self.TITLE) - len(item_string))
+                    console.print(self.x + 1, self.y + i + 1, item_string + highlight_string, bg=(0, 0, 255))
+                else:
+                    console.print(self.x + 1, self.y + i + 1, item_string)
+
         else:
-            console.print(x + 1, y + 1, "(Empty)")
+            console.print(self.x + 1, self.y + 1, "(Empty)")
 
     def ev_keydown(self, event: tcod.event.KeyDown) -> Optional[ActionOrHandler]:
+        self.menu_length = len(self.engine.player.inventory.items)
+
         player = self.engine.player
         key = event.sym
+
         index = key - tcod.event.KeySym.a
 
         if 0 <= index <= 26:
@@ -382,6 +434,14 @@ class InventoryEventHandler(AskUserEventHandler):
                 self.engine.message_log.add_message("Invalid entry.", color.invalid)
                 return None
             return self.on_item_selected(selected_item)
+        elif key in CONFIRM_KEYS:
+            try:
+                selected_item = player.inventory.items[self.highlight_index]
+            except IndexError:
+                self.engine.message_log.add_message("Invalid entry.", color.invalid)
+                return None
+            return self.on_item_selected(selected_item)
+
         return super().ev_keydown(event)
 
     def on_item_selected(self, item: Item) -> Optional[ActionOrHandler]:
@@ -578,11 +638,11 @@ class MainGameEventHandler(EventHandler):
             action = PickupAction(player)
 
         elif key == tcod.event.KeySym.v:  # (v) view inventory
-            return InventoryActivateHandler(self.engine)
+            return InventoryActivateHandler(self.engine, MainGameEventHandler(self.engine))
         elif key == tcod.event.KeySym.c:  # (c) view character stats
             return CharacterScreenEventHandler(self.engine)
         elif key == tcod.event.KeySym.d:  # (d) drop item
-            return InventoryDropHandler(self.engine)
+            return InventoryDropHandler(self.engine, MainGameEventHandler(self.engine))
 
         elif key == tcod.event.KeySym.SLASH:
             return LookHandler(self.engine)

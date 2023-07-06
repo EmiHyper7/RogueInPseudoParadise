@@ -15,6 +15,7 @@ from engine import Engine
 import entity_factories
 from game_map import GameWorld
 import input_handlers
+from input_handlers import MOVE_KEYS, CONFIRM_KEYS
 
 
 # Load the background image and remove the alpha channel.
@@ -75,6 +76,12 @@ def load_game(filename: str) -> Engine:
 class MainMenu(input_handlers.BaseEventHandler):
     """Handle the main menu rendering and input."""
 
+    highlight_index = 0
+
+    menu_length = 3
+
+    highlight_string = " "
+
     def on_render(self, console: tcod.Console) -> None:
         """Render the main menu on a background image."""
         console.draw_semigraphics(background_image, 0, 0)
@@ -86,28 +93,57 @@ class MainMenu(input_handlers.BaseEventHandler):
             fg=color.menu_title,
             alignment=libtcodpy.CENTER,
         )
-        console.print(
-            console.width // 2,
-            console.height // 2,
-            "New ",
-            fg=color.menu_text,
-            alignment=libtcodpy.CENTER,
-        )
-        console.print(
-            console.width // 2,
-            console.height // 2 + 2,
-            "Load",
-            fg=color.menu_text,
-            bg=(0, 0, 255),
-            alignment=libtcodpy.CENTER,
-        )
-        console.print(
-            console.width // 2,
-            console.height // 2 + 4,
-            "Quit",
-            fg=color.menu_text,
-            alignment=libtcodpy.CENTER,
-        )
+        if self.highlight_index == 0:
+            console.print(
+                console.width // 2,
+                console.height // 2,
+                " New  ",
+                fg=color.menu_text,
+                bg=(0, 0, 255),
+                alignment=libtcodpy.CENTER,
+            )
+        else:
+            console.print(
+                console.width // 2,
+                console.height // 2,
+                " New  ",
+                fg=color.menu_text,
+                alignment=libtcodpy.CENTER,
+            )
+        if self.highlight_index == 1:
+            console.print(
+                console.width // 2,
+                console.height // 2 + 2,
+                " Load ",
+                fg=color.menu_text,
+                bg=(0, 0, 255),
+                alignment=libtcodpy.CENTER,
+            )
+        else:
+            console.print(
+                console.width // 2,
+                console.height // 2 +2,
+                " Load ",
+                fg=color.menu_text,
+                alignment=libtcodpy.CENTER,
+            )
+        if self.highlight_index == 2:
+            console.print(
+                console.width // 2,
+                console.height // 2 + 4,
+                " Quit ",
+                fg=color.menu_text,
+                bg=(0, 0, 255),
+                alignment=libtcodpy.CENTER,
+            )
+        else:
+            console.print(
+                console.width // 2,
+                console.height // 2 + 4,
+                " Quit ",
+                fg=color.menu_text,
+                alignment=libtcodpy.CENTER,
+            )
         console.print(
             console.width // 2,
             console.height - 2,
@@ -119,9 +155,11 @@ class MainMenu(input_handlers.BaseEventHandler):
     def ev_keydown(
         self, event: tcod.event.KeyDown
     ) -> Optional[input_handlers.BaseEventHandler]:
-        if event.sym in (tcod.event.KeySym.q, tcod.event.KeySym.ESCAPE):
+        key = event.sym
+
+        if key in (tcod.event.KeySym.q, tcod.event.KeySym.ESCAPE):
             raise SystemExit()
-        elif event.sym == tcod.event.KeySym.c:
+        elif key in (tcod.event.KeySym.c, tcod.event.KeySym.l):
             try:
                 return input_handlers.MainGameEventHandler(load_game("savegame.sav"))
             except FileNotFoundError:
@@ -129,7 +167,30 @@ class MainMenu(input_handlers.BaseEventHandler):
             except Exception as exc:
                 traceback.print_exc()  # Print to stderr.
                 return input_handlers.PopupMessage(self, f"Failed to load save:\n{exc}")
-        elif event.sym == tcod.event.KeySym.n:
+        elif key == tcod.event.KeySym.n:
             return input_handlers.MainGameEventHandler(new_game())
+        elif key in MOVE_KEYS:
+            x, y = MOVE_KEYS[key]
+            if y < 0:
+                self.highlight_index -= 1
+            elif y > 0:
+                self.highlight_index += 1
+            if self.highlight_index < 0:
+                self.highlight_index = self.menu_length - 1
+            elif self.highlight_index > (self.menu_length - 1):
+                self.highlight_index = 0
+        elif key in CONFIRM_KEYS:
+            if self.highlight_index == 0:
+                return input_handlers.MainGameEventHandler(new_game())
+            elif self.highlight_index == 1:
+                try:
+                    return input_handlers.MainGameEventHandler(load_game("savegame.sav"))
+                except FileNotFoundError:
+                    return input_handlers.PopupMessage(self, "No saved game to load.")
+                except Exception as exc:
+                    traceback.print_exc()  # Print to stderr.
+                    return input_handlers.PopupMessage(self, f"Failed to load save:\n{exc}")
+            elif self.highlight_index == 2:
+                raise SystemExit()
 
         return None
